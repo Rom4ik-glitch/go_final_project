@@ -42,7 +42,7 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			err := errors.New("Invalid repeat rule for d") //дефотлтная ошибка для вывода при некорректном вводе
 			return "", err                                 //если агрумент для >400
 		}
-		newDate = newDate.AddDate(0, 0, repeatPeriod)
+		//newDate = newDate.AddDate(0, 0, repeatPeriod)
 		for dateFound == false {
 			if (newDate.After(now) && newDate.After(parsedDate)) || now.Format(dataFormat) == newDate.Format(dataFormat) { //если ближайшая дата перевалила за текущий день
 				dateFound = true //ну вот тут вопрос как правильнее, так как при return мы все равно выходим из функции, стоит ли поднимать флаг и стоит ли делать break

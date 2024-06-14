@@ -55,7 +55,7 @@ func (t *Task) MakeValid() (bool, string, *Task) {
 }
 
 func (t *Task) IsValid() (bool, string) {
-	if len(t.Title) == 0 {
+	if len(t.Title) == 0 || t.Title == "" {
 		return false, "no title"
 	}
 	return true, ""

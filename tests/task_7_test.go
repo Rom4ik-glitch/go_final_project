@@ -16,6 +16,7 @@ func notFoundTask(t *testing.T, id string) {
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
 	_, ok := m["error"]
+	//fmt.Println(string(body), m, ok)
 	assert.True(t, ok)
 }
 
