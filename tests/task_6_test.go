@@ -39,7 +39,7 @@ func TestTask(t *testing.T) {
 	assert.NoError(t, err)
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
-
+	fmt.Println(m, task)
 	assert.Equal(t, todo, m["id"])
 	assert.Equal(t, task.date, m["date"])
 	assert.Equal(t, task.title, m["title"])
@@ -113,6 +113,7 @@ func TestEditTask(t *testing.T) {
 		if _, is := newVals["repeat"]; !is {
 			newVals["repeat"] = ""
 		}
+		fmt.Println(newVals)
 		assert.Equal(t, newVals["comment"], task.Comment)
 		assert.Equal(t, newVals["repeat"], task.Repeat)
 		now := time.Now().Format(`20060102`)

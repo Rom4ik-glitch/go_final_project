@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
@@ -87,9 +88,7 @@ func createTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// execute
-	//fmt.Println(task)
-	valid, message, newTask := task.MakeValid()
-	//fmt.Println(newTask)
+	valid, message, newTask := task.SetDate()
 
 	if !valid {
 		if err := sendJson(w, 400, ErrResponse{
@@ -118,18 +117,18 @@ func createTaskHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getTask(id int) (*Task, error) {
+
 	db, err := sql.Open("sqlite3", DBFile)
 	defer db.Close()
 	if err != nil {
 		return nil, err
 	}
 
-	query := "SELECT date, title, comment, repeat FROM scheduler WHERE id=?"
+	query := "SELECT id, date, title, comment, repeat FROM scheduler WHERE id=?"
 	row := db.QueryRow(query, id)
 
 	task := &Task{}
-	err = row.Scan(&task.Date, &task.Title, &task.Comment, &task.Repeat)
-
+	err = row.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
 	switch err {
 	case sql.ErrNoRows:
 		return nil, nil // no task, but no error too
@@ -230,7 +229,26 @@ func getTasksHandler(w http.ResponseWriter, r *http.Request) {
 
 func editTask(t *Task) error {
 	db, err := sql.Open("sqlite3", DBFile)
+
+	if err != nil {
+		return err
+	}
 	defer db.Close()
+	row := db.QueryRow("SELECT MAX(id) FROM scheduler")
+
+	var maxId int
+	err = row.Scan(&maxId)
+	if err != nil {
+		return err
+	}
+	idInt, err := strconv.Atoi(t.ID)
+	if err != nil {
+		return err
+	}
+	if idInt > maxId {
+		return errors.New("Given ID is greater than max DB ID")
+	}
+
 	query := "UPDATE scheduler SET date = ?, title = ?, comment = ?, repeat = ? WHERE id = ?"
 	_, err = db.Exec(query,
 		t.Date,
@@ -247,8 +265,6 @@ func editTask(t *Task) error {
 
 func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 	// read
-	//idStr := r.URL.Query().Get("id")
-
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		panic(err)
@@ -257,20 +273,14 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 	var task *Task
 	err = json.Unmarshal(body, &task)
 	if err != nil {
-		panic(err)
+		if err := sendJson(w, 400, ErrResponse{
+			Error: err.Error(),
+		}); err != nil {
+			panic(err) // couldn't even send json, panic
+		}
+		return
 	}
-
 	// validate
-	// id, err := strconv.Atoi(idStr)
-	// fmt.Println(err)
-	// if err != nil {
-	// 	if err := sendJson(w, 400, ErrResponse{
-	// 		Error:        true,
-	// 		ErrorMessage: "invalid id",
-	// 	}); err != nil {
-	// 		panic(err)
-	// 	}
-	// }
 	valid, message := task.IsValid()
 	if !valid {
 		if err := sendJson(w, 400, ErrResponse{
@@ -281,7 +291,7 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	valid, message, newTask := task.MakeValid()
+	valid, message, newTask := task.SetDate()
 	if !valid {
 		if err := sendJson(w, 400, ErrResponse{
 			Error: message,
@@ -357,23 +367,36 @@ func deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func doneTask(id int) error {
+
 	db, err := sql.Open("sqlite3", DBFile)
 	defer db.Close()
 	if err != nil {
 		return err
 	}
-
 	task, err := getTask(id)
 	if err != nil {
 		return err
 	}
+	ruleIsSet := !(len(task.Repeat) == 0 || task.Repeat == "")
+	if !ruleIsSet {
+		err = deleteTask(id)
+		if err != nil {
+			return err
+		}
+	}
+	if ruleIsSet {
 
-	newDate, err := NextDate(time.Now(), task.Date, task.Repeat)
-	query := "UPDATE scheduler SET date = ? WHERE id = ?"
-	_, err = db.Exec(query, newDate, id)
+		newDate, err := NextDate(time.Now(), task.Date, task.Repeat)
+		if err != nil {
+			return err
+		}
+		query := "UPDATE scheduler SET date = ? WHERE id = ?"
+		_, err = db.Exec(query, newDate, id)
 
-	if err != nil {
-		return err
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 	return nil
 }
@@ -394,7 +417,7 @@ func doneTaskHandler(w http.ResponseWriter, r *http.Request) {
 	err = doneTask(id)
 	if err != nil {
 		if err := sendJson(w, 500, ErrResponse{
-			Error: "invalid id",
+			Error: err.Error(),
 		}); err != nil {
 			panic(err)
 		}

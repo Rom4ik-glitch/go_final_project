@@ -21,7 +21,7 @@ type Tasks struct {
 	Tasks []Task `json:"tasks"`
 }
 
-func (t *Task) MakeValid() (bool, string, *Task) {
+func (t *Task) SetDate() (bool, string, *Task) {
 	newTask := t
 
 	todayDateStr := time.Now().Format(dataFormat)
@@ -35,7 +35,9 @@ func (t *Task) MakeValid() (bool, string, *Task) {
 		return false, err.Error(), newTask
 	}
 
-	if date.Before(time.Now()) {
+	d := (24 * time.Hour)
+
+	if date.Before(time.Now().Truncate(d)) {
 		ruleIsSet := !(len(t.Repeat) == 0 || t.Repeat == "")
 		if !ruleIsSet {
 			t.Date = todayDateStr
