@@ -102,7 +102,6 @@ func TestAddTask(t *testing.T) {
 		assert.NoError(t, err)
 
 		e, ok := m["error"]
-		fmt.Println(m, e)
 		assert.False(t, !ok || len(fmt.Sprint(e)) == 0,
 			"Ожидается ошибка для задачи %v", v)
 	}
@@ -149,7 +148,7 @@ func TestAddTask(t *testing.T) {
 				continue
 			}
 			if today && task.Date != now.Format(`20060102`) {
-				t.Errorf("Дата должна быть сегодняшняя %v", v) //Чего? В nextdate_3_test.go при правиле d 1 ожидается завтрашняя дата, а тут мы сегодняшнюю ждем
+				t.Errorf("Дата должна быть сегодняшняя %v", v)
 			}
 		}
 	}
@@ -159,7 +158,7 @@ func TestAddTask(t *testing.T) {
 		{"20231220", "Сделать что-нибудь", "Хорошо отдохнуть", ""},
 		{"20240108", "Уроки", "", "d 10"},
 		{"20240102", "Отдых в Сочи", "На лыжах", "y"},
-		//{"today", "Фитнес", "", "d 1"}, //коммент в проверке к этой записи
+		{"today", "Фитнес", "", "d 1"},
 		{"today", "Шмитнес", "", ""},
 	}
 	check()

@@ -39,7 +39,6 @@ func TestTask(t *testing.T) {
 	assert.NoError(t, err)
 	err = json.Unmarshal(body, &m)
 	assert.NoError(t, err)
-
 	assert.Equal(t, todo, m["id"])
 	assert.Equal(t, task.date, m["date"])
 	assert.Equal(t, task.title, m["title"])
