@@ -2,12 +2,19 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 	_ "modernc.org/sqlite"
 )
+
+type Config struct {
+	dBFile string
+	port   string
+}
 
 type Task struct {
 	ID      string `json:"id,omitempty"`
@@ -71,7 +78,7 @@ func CreateDB(DBFile string) {
 	}
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS scheduler (
-			"id" INTEGER PRIMARY KEY,
+			"id" INTEGER PRIMARY KEY AUTOINCREMENT,
 			"date" CHAR(8) NOT NULL,
 			"title" VARCHAR(255) NOT NULL,
 			"comment" TEXT,
@@ -89,22 +96,36 @@ func CreateDB(DBFile string) {
 	}
 }
 
+func OpenDB(DBFile string) (*sql.DB, error) {
+	db, err := sql.Open("sqlite3", DBFile)
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
+}
+
 func main() {
-	if debugNextDate {
-		line := []string{"20240409", "m 31", "20240531"}
-		now, err := time.Parse(dataFormat, "20240126")
-		if err != nil {
-			return
-		}
-		date := line[0]
-		repeat := line[1]
-		repeatDate, err := NextDate(now, date, repeat)
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-		fmt.Println(repeatDate)
+	config := &Config{}
+
+	config.port = portConf
+	config.dBFile = dBFileConf
+
+	if len(os.Getenv("TODO_PORT")) > 0 {
+		config.port = os.Getenv("TODO_PORT")
+	}
+
+	appPath, err := os.Executable()
+	if err != nil {
+		log.Println(err)
 		return
 	}
-	ServerStart()
+
+	if len(os.Getenv("TODO_DBFILE")) > 0 {
+		config.dBFile = filepath.Join(filepath.Dir(appPath), "TODO_DBFILE")
+	}
+	err = ServerStart(config.port, config.dBFile)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 }

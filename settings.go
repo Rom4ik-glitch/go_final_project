@@ -1,9 +1,13 @@
 package main
 
-var DBFile = "./scheduler.db"
-var dataFormat = "20060102"
-var tasksLimit = 10
-var port = ":7540"
-var webDir = "./web"
+import "database/sql"
 
-var debugNextDate = false
+const webDir = "./web"
+const dBFileConf = "./scheduler.db"
+
+var db *sql.DB
+
+const dataFormat = "20060102"
+const tasksLimit = 10
+
+const portConf = ":7540"

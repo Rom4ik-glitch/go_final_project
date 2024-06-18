@@ -2,7 +2,6 @@ package tests
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -49,7 +48,6 @@ func TestDone(t *testing.T) {
 		err = db.Get(&task, `SELECT * FROM scheduler WHERE id=?`, id)
 		assert.NoError(t, err)
 		now = now.AddDate(0, 0, 3)
-		fmt.Println(id, task.Date)
 		assert.Equal(t, task.Date, now.Format(`20060102`))
 	}
 }

@@ -1,37 +1,32 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 )
 
-func ServerStart() {
-
-	if len(os.Getenv("TODO_PORT")) > 0 {
-		port = os.Getenv("TODO_PORT")
-	}
-
-	appPath, err := os.Executable()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if len(os.Getenv("TODO_DBFILE")) > 0 {
-		DBFile = filepath.Join(filepath.Dir(appPath), "TODO_DBFILE")
-	}
-
-	_, err = os.Stat(DBFile)
+func ServerStart(port, dbFile string) error {
+	_, err := os.Stat(dbFile)
 
 	var install bool
 	if err != nil {
 		install = true
 	}
 	if install {
-		CreateDB(DBFile)
+		CreateDB(dbFile)
 	}
+
+	dbConn, err := OpenDB(dbFile)
+	if err != nil {
+		return err
+	}
+
+	db = dbConn
+	defer dbConn.Close() ///
+	defer db.Close()     ///
+
+	log.Printf("Server started at port %s", port)
 
 	http.Handle("/", http.FileServer(http.Dir(webDir)))
 
@@ -44,8 +39,8 @@ func ServerStart() {
 
 	err = http.ListenAndServe(port, nil)
 	if err != nil {
-		panic(err)
+		log.Println(err)
+		return err
 	}
-	fmt.Println("Завершаем работу")
-	return
+	return nil
 }

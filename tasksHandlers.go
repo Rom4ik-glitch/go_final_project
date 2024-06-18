@@ -3,8 +3,8 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -48,9 +48,6 @@ func taskHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func createTask(t *Task) (int64, error) {
-
-	db, err := sql.Open("sqlite3", DBFile)
-	defer db.Close()
 	query := "INSERT INTO scheduler (date, title, comment, repeat) VALUES (?, ?, ?, ?) RETURNING id"
 	result, err := db.Exec(query, t.Date, t.Title, t.Comment, t.Repeat)
 	if err != nil {
@@ -68,22 +65,24 @@ func createTaskHandler(w http.ResponseWriter, r *http.Request) {
 	// read data
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		panic(err)
+		log.Println(err)
+		return
 	}
 
 	var task *Task
 	err = json.Unmarshal(body, &task)
 	if err != nil {
-		panic(err)
+		log.Println(err)
+		return
 	}
 
 	// validate
 
 	if valid, message := task.IsValid(); !valid {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: message,
 		}); err != nil {
-			panic(err) // couldn't even send json, panic
+			log.Println(err)
 		}
 		return
 	}
@@ -91,44 +90,38 @@ func createTaskHandler(w http.ResponseWriter, r *http.Request) {
 	valid, message, newTask := task.SetDate()
 
 	if !valid {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: message,
 		}); err != nil {
-			panic(err) // couldn't even send json, panic
+			log.Println(err)
 		}
 		return
 	}
 	newTaskID, err := createTask(newTask)
 	if err != nil {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: err.Error(),
 		}); err != nil {
-			panic(err) // couldn't even send json, panic
+			log.Println(err)
 		}
 		return
 	}
 
 	// send json
-	if err := sendJson(w, 200, ReturnResponse{
+	if err := sendJson(w, http.StatusOK, ReturnResponse{
 		ID: newTaskID,
 	}); err != nil {
-		panic(err)
+		log.Println(err)
+		return
 	}
 }
 
 func getTask(id int) (*Task, error) {
-
-	db, err := sql.Open("sqlite3", DBFile)
-	defer db.Close()
-	if err != nil {
-		return nil, err
-	}
-
 	query := "SELECT id, date, title, comment, repeat FROM scheduler WHERE id=?"
 	row := db.QueryRow(query, id)
 
 	task := &Task{}
-	err = row.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+	err := row.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
 	switch err {
 	case sql.ErrNoRows:
 		return nil, nil // no task, but no error too
@@ -146,10 +139,10 @@ func getTaskHandler(w http.ResponseWriter, r *http.Request) {
 	// validate
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: "invalid id",
 		}); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
@@ -158,36 +151,32 @@ func getTaskHandler(w http.ResponseWriter, r *http.Request) {
 	task, err := getTask(id)
 	// handle error
 	if err != nil {
-		if err := sendJson(w, 500, ErrResponse{
+		if err := sendJson(w, http.StatusInternalServerError, ErrResponse{
 			Error: "internal server error",
 		}); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
 
 	// handle 404
 	if task == nil {
-		if err := sendJson(w, 404, ErrResponse{
+		if err := sendJson(w, http.StatusNotFound, ErrResponse{
 			Error: "no task with this id",
 		}); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
 
 	// return
-	if err := sendJson(w, 200, task); err != nil {
-		panic(err)
+	if err := sendJson(w, http.StatusOK, task); err != nil {
+		log.Println(err)
+		return
 	}
 }
 
 func getTasks(limit int) (*Tasks, error) {
-	db, err := sql.Open("sqlite3", DBFile)
-	defer db.Close()
-	if err != nil {
-		return nil, err
-	}
 	rows, err := db.Query("SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date LIMIT ?", limit)
 	if err != nil {
 		return nil, err
@@ -206,6 +195,11 @@ func getTasks(limit int) (*Tasks, error) {
 		}
 		tasks.Tasks = append(tasks.Tasks, *task)
 	}
+
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+
 	if tasks.Tasks == nil {
 		tasks.Tasks = []Task{}
 	}
@@ -215,38 +209,26 @@ func getTasks(limit int) (*Tasks, error) {
 func getTasksHandler(w http.ResponseWriter, r *http.Request) {
 	tasks, err := getTasks(tasksLimit)
 	if err != nil {
-		if err := sendJson(w, 500, ErrResponse{
+		if err := sendJson(w, http.StatusInternalServerError, ErrResponse{
 			Error: "internal server error",
 		}); err != nil {
-			panic(err)
+			log.Println(err)
 		}
+		log.Println(err)
 		return
 	}
-	if err := sendJson(w, 200, tasks); err != nil {
-		panic(err)
+	if err := sendJson(w, http.StatusOK, tasks); err != nil {
+		log.Println(err)
+		return
 	}
 }
 
 func editTask(t *Task) error {
-	db, err := sql.Open("sqlite3", DBFile)
+	row := db.QueryRow("SELECT id FROM scheduler WHERE id=?", t.ID)
 
-	if err != nil {
+	err := row.Scan()
+	if err == sql.ErrNoRows {
 		return err
-	}
-	defer db.Close()
-	row := db.QueryRow("SELECT MAX(id) FROM scheduler")
-
-	var maxId int
-	err = row.Scan(&maxId)
-	if err != nil {
-		return err
-	}
-	idInt, err := strconv.Atoi(t.ID)
-	if err != nil {
-		return err
-	}
-	if idInt > maxId {
-		return errors.New("Given ID is greater than max DB ID")
 	}
 
 	query := "UPDATE scheduler SET date = ?, title = ?, comment = ?, repeat = ? WHERE id = ?"
@@ -267,36 +249,37 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 	// read
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		panic(err)
+		log.Println(err)
+		return
 	}
 
 	var task *Task
 	err = json.Unmarshal(body, &task)
 	if err != nil {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: err.Error(),
 		}); err != nil {
-			panic(err) // couldn't even send json, panic
+			log.Println(err)
 		}
 		return
 	}
 	// validate
 	valid, message := task.IsValid()
 	if !valid {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: message,
 		}); err != nil {
-			panic(err) // couldn't even send json, panic
+			log.Println(err)
 		}
 		return
 	}
 
 	valid, message, newTask := task.SetDate()
 	if !valid {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: message,
 		}); err != nil {
-			panic(err) // couldn't even send json, panic
+			log.Println(err)
 		}
 		return
 	}
@@ -305,33 +288,26 @@ func editTaskHandler(w http.ResponseWriter, r *http.Request) {
 	err = editTask(newTask)
 	if err != nil {
 
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: err.Error(),
 		}); err != nil {
-
-			panic(err) // couldn't even send json, panic
+			log.Println(err)
 		}
 		return
 	}
 	// return
-	if err := sendJson(w, 200, task); err != nil {
-		panic(err)
+	if err := sendJson(w, http.StatusOK, task); err != nil {
+		log.Println(err)
+		return
 	}
 }
 
 func deleteTask(id int) error {
-	db, err := sql.Open("sqlite3", DBFile)
-	defer db.Close()
-	if err != nil {
-		return err
-	}
-
 	query := "DELETE FROM scheduler WHERE id=?"
-	_, err = db.Exec(query, id)
+	_, err := db.Exec(query, id)
 
 	if err != nil {
 		return err
-
 	}
 	return nil
 }
@@ -343,36 +319,31 @@ func deleteTaskHandler(w http.ResponseWriter, r *http.Request) {
 	// validate
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: "invalid id",
 		}); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
 	// execute
 	err = deleteTask(id)
 	if err != nil {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: "invalid id",
 		}); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
 	// return
-	if err := sendJson(w, 200, struct{}{}); err != nil {
-		panic(err)
+	if err := sendJson(w, http.StatusOK, struct{}{}); err != nil {
+		log.Println(err)
+		return
 	}
 }
 
 func doneTask(id int) error {
-
-	db, err := sql.Open("sqlite3", DBFile)
-	defer db.Close()
-	if err != nil {
-		return err
-	}
 	task, err := getTask(id)
 	if err != nil {
 		return err
@@ -406,25 +377,26 @@ func doneTaskHandler(w http.ResponseWriter, r *http.Request) {
 	// validate
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		if err := sendJson(w, 400, ErrResponse{
+		if err := sendJson(w, http.StatusBadRequest, ErrResponse{
 			Error: "invalid id",
 		}); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
 	// execute
 	err = doneTask(id)
 	if err != nil {
-		if err := sendJson(w, 500, ErrResponse{
+		if err := sendJson(w, http.StatusInternalServerError, ErrResponse{
 			Error: err.Error(),
 		}); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
 	// return
-	if err := sendJson(w, 200, struct{}{}); err != nil {
-		panic(err)
+	if err := sendJson(w, http.StatusOK, struct{}{}); err != nil {
+		log.Println(err)
+		return
 	}
 }
